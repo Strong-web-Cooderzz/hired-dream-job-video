@@ -1,42 +1,39 @@
-const express = require('express');
+const express = require("express");
 const app = express();
-const http = require('http');
-const server = http.createServer(app);
-
+const server = require("http").Server(app);
+const { v4: uuidv4 } = require("uuid");
+app.set("view engine", "ejs");
 const io = require("socket.io")(server, {
-	cors: {
-		origin: "http://localhost:3000",
-		methods: [ "GET", "POST" ]
-	}
-})
+  cors: {
+    origin: '*'
+  }
+});
+const { ExpressPeerServer } = require("peer");
+const opinions = {
+  debug: true,
+}
+
+app.use("/peerjs", ExpressPeerServer(server, opinions));
+app.use(express.static("public"));
+
+app.get("/", (req, res) => {
+  res.redirect(`/${uuidv4()}`);
+});
+
+app.get("/:room", (req, res) => {
+  res.render("room", { roomId: req.params.room });
+});
 
 io.on("connection", (socket) => {
-	socket.emit("me", socket.id)
-
-	socket.on("disconnect", () => {
-		socket.broadcast.emit("callEnded")
-	})
-
-	socket.on("callUser", (data) => {
-		io.to(data.userToCall).emit("callUser", { signal: data.signalData, from: data.from, name: data.name })
-	})
-
-	socket.on("answerCall", (data) => {
-		io.to(data.to).emit("callAccepted", data.signal)
-	})
-})
-
-
-
-
-
-
-
-
-app.get('/', (req, res) => {
-  res.send('<h1>Hello worldddd</h1>');
+  socket.on("join-room", (roomId, userId, userName) => {
+    socket.join(roomId);
+    setTimeout(()=>{
+      socket.to(roomId).broadcast.emit("user-connected", userId);
+    }, 1000)
+    socket.on("message", (message) => {
+      io.to(roomId).emit("createMessage", message, userName);
+    });
+  });
 });
 
-server.listen(5000, () => {
-  console.log('listening on *:5000');
-});
+server.listen(process.env.PORT || 3030);
